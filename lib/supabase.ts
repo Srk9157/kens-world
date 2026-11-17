@@ -1,4 +1,3 @@
-
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
@@ -18,7 +17,7 @@ export async function serverDb() {
           items: {
             name: string;
             value: string;
-            options?: CookieOptions;
+            options?: import('@supabase/ssr').CookieOptions;
           }[]
         ) {
           try {
