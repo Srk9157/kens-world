@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { SiteContent } from '@/lib/site-content';
+import { SOCIAL_PLATFORMS, type SocialItem } from '@/lib/socials';
+import { SocialIcon } from '@/app/components/social-icon';
 
 type Post = {
   id: string;
@@ -56,13 +58,13 @@ export default function Studio({
   initialContent,
 }: {
   initial: Post[];
-  initialSocials: Record<string, string>;
+  initialSocials: SocialItem[];
   initialContent: SiteContent;
 }) {
   const router = useRouter();
   const db = browserDb();
   const [posts, setPosts] = useState(initial);
-  const [socials, setSocials] = useState(initialSocials);
+  const [socials, setSocials] = useState<SocialItem[]>(initialSocials);
   const [siteContent, setSiteContent] = useState<SiteContent>(initialContent);
   const [panel, setPanel] = useState<Panel>('articles');
   const [settingsMessage, setSettingsMessage] = useState('');
@@ -177,29 +179,100 @@ export default function Studio({
     setBusy(false);
   }
 
+  function updateSocial(id: string, patch: Partial<SocialItem>) {
+    setSocials((old) => old.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  function addSocial() {
+    setSocials((old) => [
+      ...old,
+      { id: crypto.randomUUID(), platform: 'custom', label: '', url: '', icon_url: null },
+    ]);
+    setSettingsMessage('');
+  }
+
+  function moveSocial(index: number, offset: -1 | 1) {
+    setSocials((old) => {
+      const next = [...old];
+      const otherIndex = index + offset;
+      if (otherIndex < 0 || otherIndex >= next.length) return old;
+      [next[index], next[otherIndex]] = [next[otherIndex], next[index]];
+      return next;
+    });
+  }
+
+  async function uploadSocialIcon(id: string, file: File) {
+    setSettingsMessage('');
+    const types: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    };
+    if (!types[file.type] || file.size > 1024 * 1024) {
+      setSettingsMessage('Use a PNG, JPG, WebP or GIF icon under 1 MB. SVG uploads are not supported.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const path = `social-icons/${crypto.randomUUID()}.${types[file.type]}`;
+      const { error } = await db.storage.from('blog-images').upload(path, file, { contentType: file.type });
+      if (error) {
+        setSettingsMessage(`Image upload failed: ${error.message}`);
+        return;
+      }
+      const { data } = db.storage.from('blog-images').getPublicUrl(path);
+      updateSocial(id, { icon_url: data.publicUrl });
+      setSettingsMessage('Icon uploaded. Click Save social links to publish it.');
+    } catch (error) {
+      setSettingsMessage(`Image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveSocials() {
     setSettingsMessage('');
-    const cleaned: Record<string, string> = {};
-    for (const [key, value] of Object.entries(socials)) {
-      if (!value.trim()) continue;
+    if (socials.length > 40) {
+      setSettingsMessage('Please keep the list under 40 links.');
+      return;
+    }
+    const cleaned: SocialItem[] = [];
+    for (const item of socials) {
+      const label = item.label.trim();
+      const url = item.url.trim();
+      if (!label || !url) {
+        setSettingsMessage('Each social link needs a name and a complete HTTPS URL. Remove unused rows before saving.');
+        return;
+      }
       try {
-        const parsed = new URL(value.trim());
+        const parsed = new URL(url);
         if (parsed.protocol !== 'https:') throw new Error('HTTPS only');
-        cleaned[key] = parsed.toString();
+        cleaned.push({
+          id: item.id,
+          platform: item.platform,
+          label: label.slice(0, 80),
+          url: parsed.toString(),
+          icon_url: item.icon_url,
+        });
       } catch {
-        setSettingsMessage(`Please enter a complete HTTPS URL for ${key}.`);
+        setSettingsMessage(`Please enter a complete HTTPS URL for ${label}.`);
         return;
       }
     }
     setBusy(true);
     const { error } = await db
       .from('site_settings')
-      .update({ social_links: cleaned })
+      .update({ social_items: cleaned })
       .eq('id', 1)
       .select('id')
       .single();
     setBusy(false);
-    setSettingsMessage(error ? `Could not save: ${error.message}` : 'Social links saved. Your public footer is updated.');
+    setSettingsMessage(
+      error
+        ? `Could not save: ${error.message}. Ensure you ran upgrade-social-icons.sql in Supabase.`
+        : 'Social links saved! Refresh your public blog to see the icons.'
+    );
     if (!error) router.refresh();
   }
 
@@ -314,19 +387,51 @@ export default function Studio({
             <section className="settings-panel">
               <span className="eyebrow">WEBSITE SETTINGS</span>
               <h2>Your social connections</h2>
-              <p className="settings-intro">Add or change your social links at any time. Leave a field blank to hide it from the public footer.</p>
-              {['github', 'instagram', 'linkedin', 'youtube', 'x', 'website'].map((platform) => (
-                <label key={platform}>
-                  {platform.toUpperCase()}
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    value={socials[platform] || ''}
-                    onChange={(event) => setSocials((old) => ({ ...old, [platform]: event.target.value }))}
-                  />
-                </label>
-              ))}
+              <p className="settings-intro">Choose a known platform for its official-style icon. Choose Other / Custom to add any website and upload your own icon. Drag-free order controls work on mobile too. Changes go live after you click Save.</p>
+              <div className="social-edit-list">
+                {socials.map((item, index) => (
+                  <div className="social-edit-card" key={item.id}>
+                    <div className="social-edit-top">
+                      <div className="social-edit-preview"><SocialIcon platform={item.platform} iconUrl={item.icon_url} /><span>{item.label || 'New link'}</span></div>
+                      <div className="social-edit-controls">
+                        <button className="secondary" type="button" aria-label={`Move ${item.label || 'link'} up`} disabled={busy || index === 0} onClick={() => moveSocial(index, -1)}>↑</button>
+                        <button className="secondary" type="button" aria-label={`Move ${item.label || 'link'} down`} disabled={busy || index === socials.length - 1} onClick={() => moveSocial(index, 1)}>↓</button>
+                        <button className="danger" type="button" disabled={busy} onClick={() => setSocials((old) => old.filter((entry) => entry.id !== item.id))}>Remove</button>
+                      </div>
+                    </div>
+                    <div className="settings-grid social-edit-fields">
+                      <label>
+                        ICON / PLATFORM
+                        <select value={item.platform} onChange={(event) => {
+                          const platform = event.target.value;
+                          const label = SOCIAL_PLATFORMS.find((entry) => entry.value === platform)?.label || '';
+                          updateSocial(item.id, { platform, label: item.label.trim() || label });
+                        }}>
+                          {SOCIAL_PLATFORMS.map((platform) => <option value={platform.value} key={platform.value}>{platform.label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        DISPLAY NAME
+                        <input value={item.label} maxLength={80} placeholder="e.g. My portfolio" onChange={(event) => updateSocial(item.id, { label: event.target.value })} />
+                      </label>
+                      <label className="span-all">
+                        LINK (HTTPS)
+                        <input type="url" value={item.url} placeholder="https://example.com/myprofile" onChange={(event) => updateSocial(item.id, { url: event.target.value })} />
+                      </label>
+                    </div>
+                    <div className="social-icon-controls">
+                      <label className="upload-control">
+                        {item.icon_url ? 'Replace custom image' : 'Upload custom icon (optional)'}
+                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={(event) => {const file = event.target.files?.[0]; if (file) void uploadSocialIcon(item.id, file); event.target.value = '';}} />
+                      </label>
+                      {item.icon_url && <button type="button" className="secondary" disabled={busy} onClick={() => updateSocial(item.id, { icon_url: null })}>Use default icon</button>}
+                      <span className="muted">PNG/JPG/WebP/GIF, up to 1 MB · public image</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
               <div className="settings-actions">
+                <button className="secondary" type="button" disabled={busy} onClick={addSocial}>+ Add another social link</button>
                 <button className="button" type="button" disabled={busy} onClick={saveSocials}>Save social links</button>
                 {settingsMessage && <p role="status">{settingsMessage}</p>}
               </div>

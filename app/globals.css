@@ -32,3 +32,25 @@ input:not([type=file]),textarea{border-radius:8px;color:var(--ink)}.editor-field
 .settings-panel .settings-actions p{margin:0;font-size:13px}
 .about-description{white-space:pre-line}
 @media(max-width:700px){.settings-grid{grid-template-columns:1fr}.studio-tabs{width:100%}.studio-tabs button{flex:1}.journal-search-controls{gap:7px}.journal-search-clear{padding:12px}}
+
+
+/* v5 — social icons and Studio social-link manager */
+.socials{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.socials a{display:inline-flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:12px;transition:background .2s,border-color .2s,transform .2s}
+.socials a:hover{background:#202431;border-color:var(--accent);transform:translateY(-2px)}
+.socials a svg{width:20px;height:20px;flex-shrink:0}
+.social-icon-image{width:21px;height:21px;object-fit:contain;flex-shrink:0;border-radius:4px}
+.social-edit-list{display:grid;gap:18px;margin:28px 0}
+.social-edit-card{padding:22px;border:1px solid var(--line);border-radius:14px;background:#11151e}
+.social-edit-top,.social-edit-preview,.social-edit-controls,.social-icon-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.social-edit-top{justify-content:space-between}
+.social-edit-preview{font-size:14px;font-weight:600}
+.social-edit-preview svg{width:22px;height:22px}
+.social-edit-controls button{padding:8px 12px}
+.social-edit-fields{margin-top:8px}
+.settings-panel select{display:block;width:100%;margin-top:9px;padding:15px;border:1px solid var(--line);background:#171b25;color:var(--ink);border-radius:8px;outline:none;font:inherit}
+.settings-panel select:focus{border-color:var(--accent)}
+.social-icon-controls{margin-top:20px}
+.social-icon-controls .upload-control{margin:0;font-size:12px;letter-spacing:0;font-weight:500}
+.social-icon-controls .upload-control input[type=file]{width:180px;max-width:180px}
+@media(max-width:700px){.social-edit-card{padding:15px}.social-edit-top{align-items:flex-start}.social-edit-controls{width:100%}.social-edit-controls button{flex:1}.socials a{padding:9px 11px}}
